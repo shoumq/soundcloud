@@ -1,0 +1,7 @@
+.git
+.idea
+.vscode
+var
+tmp
+*.exe
+*.test
