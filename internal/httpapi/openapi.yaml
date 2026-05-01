@@ -1,14 +1,15 @@
 openapi: 3.0.3
 info:
   title: Soundcloud-like API
-  version: 0.1.0
-  description: Backend API for auth, music upload, track listing and audio streaming.
+  version: 0.2.0
+  description: Backend API for auth, albums, music upload, track covers, track listing and audio streaming.
 servers:
   - url: http://localhost:8080
 tags:
   - name: Health
   - name: Auth
   - name: Tracks
+  - name: Albums
 paths:
   /health:
     get:
@@ -67,6 +68,34 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/telegram:
+    post:
+      tags: [Auth]
+      summary: Login or register with Telegram
+      description: Accepts data from Telegram Login Widget. The API validates the Telegram hash with TELEGRAM_BOT_TOKEN and returns the same JWT auth result as email login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramAuthRequest"
+      responses:
+        "200":
+          description: Logged in or registered with Telegram
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: Telegram auth is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/tracks:
     get:
       tags: [Tracks]
@@ -83,6 +112,7 @@ paths:
     post:
       tags: [Tracks]
       summary: Upload track
+      description: Artist is set automatically from the authenticated user's username.
       security:
         - bearerAuth: []
       requestBody:
@@ -96,12 +126,17 @@ paths:
                 title:
                   type: string
                   example: My First Track
-                artist:
+                album_id:
                   type: string
-                  example: Demo Artist
+                  description: Optional album id owned by the authenticated user.
+                  example: 38104d69c36c45b986b3a8cecebc4f3d
                 audio:
                   type: string
                   format: binary
+                cover:
+                  type: string
+                  format: binary
+                  description: Optional jpeg, png, webp or gif image up to 10MB.
       responses:
         "201":
           description: Track uploaded
@@ -160,6 +195,101 @@ paths:
           description: Partial audio stream
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/tracks/{id}/cover:
+    get:
+      tags: [Tracks]
+      summary: Get track cover image
+      parameters:
+        - $ref: "#/components/parameters/TrackID"
+      responses:
+        "200":
+          description: Cover image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/albums:
+    get:
+      tags: [Albums]
+      summary: List albums
+      responses:
+        "200":
+          description: Album list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Album"
+    post:
+      tags: [Albums]
+      summary: Create album
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlbumRequest"
+      responses:
+        "201":
+          description: Album created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/albums/{id}:
+    get:
+      tags: [Albums]
+      summary: Get album metadata
+      parameters:
+        - $ref: "#/components/parameters/AlbumID"
+      responses:
+        "200":
+          description: Album metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/albums/{id}/tracks:
+    get:
+      tags: [Albums]
+      summary: List album tracks
+      parameters:
+        - $ref: "#/components/parameters/AlbumID"
+      responses:
+        "200":
+          description: Album track list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -174,6 +304,13 @@ components:
       schema:
         type: string
       example: 8d769de1f6a04a1bf333e29e2f6a5c2d
+    AlbumID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: 38104d69c36c45b986b3a8cecebc4f3d
   schemas:
     RegisterRequest:
       type: object
@@ -201,6 +338,35 @@ components:
         password:
           type: string
           example: password123
+    TelegramAuthRequest:
+      type: object
+      required: [id, auth_date, hash]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 123456789
+        first_name:
+          type: string
+          example: Demo
+        last_name:
+          type: string
+          example: User
+        username:
+          type: string
+          example: demo_user
+        photo_url:
+          type: string
+          format: uri
+          example: https://t.me/i/userpic/320/demo.jpg
+        auth_date:
+          type: integer
+          format: int64
+          description: Unix timestamp from Telegram Login Widget.
+          example: 1714564800
+        hash:
+          type: string
+          description: Telegram Login Widget HMAC hash.
     AuthResult:
       type: object
       properties:
@@ -219,6 +385,8 @@ components:
           format: email
         username:
           type: string
+        telegram_id:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -229,10 +397,13 @@ components:
           type: string
         owner_id:
           type: string
+        album_id:
+          type: string
         title:
           type: string
         artist:
           type: string
+          description: Username of the track owner.
         filename:
           type: string
         content_type:
@@ -241,9 +412,41 @@ components:
         size:
           type: integer
           format: int64
+        cover_filename:
+          type: string
+        cover_content_type:
+          type: string
+          example: image/jpeg
+        cover_size:
+          type: integer
+          format: int64
         created_at:
           type: string
           format: date-time
+    Album:
+      type: object
+      properties:
+        id:
+          type: string
+        owner_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    CreateAlbumRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          example: Debut Album
+        description:
+          type: string
+          example: Collection of early tracks.
     Error:
       type: object
       properties:

@@ -1,0 +1,32 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Binaries and build output
+/api
+/api.exe
+/bin/
+/dist/
+/build/
+*.exe
+*.test
+*.out
+
+# Coverage and profiling
+/coverage/
+coverage.out
+*.prof
+
+# Local runtime data
+/tmp/
+/var/
+
+# Logs
+*.log
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

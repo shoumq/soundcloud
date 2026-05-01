@@ -54,3 +54,27 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, result)
 }
+
+func (h *Handler) telegramAuth(w http.ResponseWriter, r *http.Request) {
+	var req service.TelegramAuthData
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	result, err := h.auth.LoginTelegram(r.Context(), req)
+	if errors.Is(err, service.ErrTelegramNotConfigured) {
+		writeError(w, http.StatusServiceUnavailable, "telegram auth is not configured")
+		return
+	}
+	if errors.Is(err, service.ErrInvalidCredentials) {
+		writeError(w, http.StatusUnauthorized, "invalid telegram auth data")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "telegram auth failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

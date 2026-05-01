@@ -45,12 +45,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	authService := service.NewAuthService(pg, cfg.JWTSecret)
-	trackService := service.NewTrackService(pg.CreateTrackRepository(), fileStorage)
+	authService := service.NewAuthService(pg, cfg.JWTSecret, cfg.TelegramBotToken)
+	trackRepository := pg.CreateTrackRepository()
+	albumRepository := pg.CreateAlbumRepository()
+	trackService := service.NewTrackService(trackRepository, pg, albumRepository, fileStorage)
+	albumService := service.NewAlbumService(albumRepository, trackRepository)
 
 	router := httpapi.NewRouter(httpapi.RouterConfig{
 		Auth:      authService,
 		Tracks:    trackService,
+		Albums:    albumService,
 		JWTSecret: cfg.JWTSecret,
 		Logger:    logger,
 	})

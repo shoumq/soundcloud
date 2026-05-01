@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 
@@ -29,7 +30,18 @@ func (h *Handler) uploadTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	track, err := h.tracks.Upload(r.Context(), userID, r.FormValue("title"), r.FormValue("artist"), file, header)
+	var coverHeader = (*multipart.FileHeader)(nil)
+	var cover multipart.File
+	cover, coverHeader, err = r.FormFile("cover")
+	if err != nil && !errors.Is(err, http.ErrMissingFile) {
+		writeError(w, http.StatusBadRequest, "invalid cover file")
+		return
+	}
+	if cover != nil {
+		defer cover.Close()
+	}
+
+	track, err := h.tracks.Upload(r.Context(), userID, r.FormValue("title"), r.FormValue("album_id"), file, header, cover, coverHeader)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -78,4 +90,21 @@ func (h *Handler) streamTrack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Disposition", `inline; filename="`+filepath.Base(track.Filename)+`"`)
 	http.ServeContent(w, r, track.Filename, track.CreatedAt, reader)
+}
+
+func (h *Handler) streamTrackCover(w http.ResponseWriter, r *http.Request) {
+	track, reader, err := h.tracks.OpenCover(r.Context(), chi.URLParam(r, "id"))
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "cover not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to open cover")
+		return
+	}
+	defer reader.Close()
+
+	w.Header().Set("Content-Type", track.CoverContentType)
+	w.Header().Set("Content-Disposition", `inline; filename="`+filepath.Base(track.CoverFilename)+`"`)
+	http.ServeContent(w, r, track.CoverFilename, track.CreatedAt, reader)
 }

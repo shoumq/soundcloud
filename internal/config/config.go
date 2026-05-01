@@ -7,12 +7,13 @@ import (
 )
 
 type Config struct {
-	HTTPAddr      string
-	JWTSecret     string
-	DatabaseURL   string
-	StorageDriver string
-	StorageDir    string
-	S3            S3Config
+	HTTPAddr         string
+	JWTSecret        string
+	TelegramBotToken string
+	DatabaseURL      string
+	StorageDriver    string
+	StorageDir       string
+	S3               S3Config
 }
 
 type S3Config struct {
@@ -26,11 +27,12 @@ type S3Config struct {
 
 func Load() Config {
 	return Config{
-		HTTPAddr:      env("HTTP_ADDR", ":8080"),
-		JWTSecret:     env("JWT_SECRET", "dev-secret-change-me"),
-		DatabaseURL:   env("DATABASE_URL", "postgres://soundcloud:soundcloud@localhost:5432/soundcloud?sslmode=disable"),
-		StorageDriver: env("STORAGE_DRIVER", "local"),
-		StorageDir:    env("STORAGE_DIR", "var/tracks"),
+		HTTPAddr:         env("HTTP_ADDR", ":8080"),
+		JWTSecret:        env("JWT_SECRET", "dev-secret-change-me"),
+		TelegramBotToken: env("TELEGRAM_BOT_TOKEN", ""),
+		DatabaseURL:      env("DATABASE_URL", "postgres://soundcloud:soundcloud@localhost:5432/soundcloud?sslmode=disable"),
+		StorageDriver:    env("STORAGE_DRIVER", "local"),
+		StorageDir:       env("STORAGE_DIR", "var/tracks"),
 		S3: S3Config{
 			Endpoint:  env("S3_ENDPOINT", "localhost:9000"),
 			AccessKey: env("S3_ACCESS_KEY", "minioadmin"),
