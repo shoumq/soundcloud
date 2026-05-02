@@ -117,3 +117,20 @@ curl.exe -I http://localhost:8080/api/v1/tracks/<id>/stream
 ```
 
 Для MP3 должен быть `Content-Type: audio/mpeg`.
+
+## CD
+
+В репозитории настроен GitHub Actions workflow [`.github/workflows/cd.yml`](.github/workflows/cd.yml).
+
+Он запускается:
+
+- при `push` в `main` или `master`;
+- при пуше тега вида `v*`;
+- вручную через `workflow_dispatch`.
+
+Workflow собирает Docker-образ из [`Dockerfile`](Dockerfile) и публикует его в GHCR:
+
+- `ghcr.io/<owner>/soundcloud-api:latest` для default branch;
+- `ghcr.io/<owner>/soundcloud-api:<branch>`;
+- `ghcr.io/<owner>/soundcloud-api:<tag>`;
+- `ghcr.io/<owner>/soundcloud-api:sha-<commit>`.
