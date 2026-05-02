@@ -148,14 +148,11 @@ docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 - `DEPLOY_HOST`
 - `DEPLOY_USERNAME`
 - `DEPLOY_PASSWORD`
-- `DEPLOY_GIT_TOKEN`
 
 На сервере workflow автоматически:
 
 - клонирует или обновляет `https://github.com/shoumq/soundcloud` в `/opt/soundcloud`;
 - клонирует или обновляет `https://github.com/shoumq/soundcloud-front` в `/opt/soundcloud-front`;
 - создает `.env.production` из [`.env.production.example`](.env.production.example), если файла еще нет.
-
-`DEPLOY_GIT_TOKEN` должен иметь доступ на чтение приватных репозиториев `shoumq/soundcloud` и `shoumq/soundcloud-front`.
 
 После первого деплоя нужно вручную открыть и заполнить `/opt/soundcloud/.env.production` продовыми значениями.
