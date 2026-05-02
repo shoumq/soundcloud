@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	HTTPAddr         string
 	JWTSecret        string
 	TelegramBotToken string
+	AllowedOrigins  []string
 	DatabaseURL      string
 	StorageDriver    string
 	StorageDir       string
@@ -30,6 +32,7 @@ func Load() Config {
 		HTTPAddr:         env("HTTP_ADDR", ":8080"),
 		JWTSecret:        env("JWT_SECRET", "dev-secret-change-me"),
 		TelegramBotToken: env("TELEGRAM_BOT_TOKEN", ""),
+		AllowedOrigins:  envList("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		DatabaseURL:      env("DATABASE_URL", "postgres://soundcloud:soundcloud@localhost:5432/soundcloud?sslmode=disable"),
 		StorageDriver:    env("STORAGE_DRIVER", "local"),
 		StorageDir:       env("STORAGE_DIR", "var/tracks"),
@@ -49,6 +52,24 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envList(key, fallback string) []string {
+	value := env(key, fallback)
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			values = append(values, part)
+		}
+	}
+
+	return values
 }
 
 func envBool(key string, fallback bool) bool {

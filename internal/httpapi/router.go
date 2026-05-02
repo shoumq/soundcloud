@@ -11,11 +11,12 @@ import (
 )
 
 type RouterConfig struct {
-	Auth      *service.AuthService
-	Tracks    *service.TrackService
-	Albums    *service.AlbumService
-	JWTSecret string
-	Logger    *slog.Logger
+	Auth           *service.AuthService
+	Tracks         *service.TrackService
+	Albums         *service.AlbumService
+	JWTSecret      string
+	AllowedOrigins []string
+	Logger         *slog.Logger
 }
 
 type Handler struct {
@@ -29,7 +30,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
-	r.Use(corsMiddleware)
+	r.Use(corsMiddleware(cfg.AllowedOrigins))
 	if cfg.Logger != nil {
 		r.Use(requestLogger(cfg.Logger))
 	}

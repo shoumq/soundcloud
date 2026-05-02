@@ -52,11 +52,12 @@ func main() {
 	albumService := service.NewAlbumService(albumRepository, trackRepository)
 
 	router := httpapi.NewRouter(httpapi.RouterConfig{
-		Auth:      authService,
-		Tracks:    trackService,
-		Albums:    albumService,
-		JWTSecret: cfg.JWTSecret,
-		Logger:    logger,
+		Auth:           authService,
+		Tracks:         trackService,
+		Albums:         albumService,
+		JWTSecret:      cfg.JWTSecret,
+		AllowedOrigins: cfg.AllowedOrigins,
+		Logger:         logger,
 	})
 
 	logger.Info("api listening", "addr", cfg.HTTPAddr, "storage_driver", cfg.StorageDriver)
