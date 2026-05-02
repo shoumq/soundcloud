@@ -67,6 +67,8 @@ jobs:
           script: |
             set -eu
 
+            GIT_AUTH_URL="https://x-access-token:${{ secrets.DEPLOY_GIT_TOKEN }}@github.com"
+
             update_repo() {
               repo_url="$1"
               target_dir="$2"
@@ -75,6 +77,7 @@ jobs:
                 git clone "$repo_url" "$target_dir"
               fi
 
+              git -C "$target_dir" remote set-url origin "$repo_url"
               git -C "$target_dir" fetch --all --prune
               branch="$(git -C "$target_dir" remote show origin | sed -n '/HEAD branch/s/.*: //p')"
               git -C "$target_dir" checkout "$branch"
@@ -82,8 +85,8 @@ jobs:
             }
 
             mkdir -p /opt
-            update_repo https://github.com/shoumq/soundcloud /opt/soundcloud
-            update_repo https://github.com/shoumq/soundcloud-front /opt/soundcloud-front
+            update_repo "$GIT_AUTH_URL/shoumq/soundcloud.git" /opt/soundcloud
+            update_repo "$GIT_AUTH_URL/shoumq/soundcloud-front.git" /opt/soundcloud-front
 
             if [ ! -f /opt/soundcloud/.env.production ]; then
               cp /opt/soundcloud/.env.production.example /opt/soundcloud/.env.production
