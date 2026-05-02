@@ -49,3 +49,45 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    name: Deploy to production server
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script_stop: true
+          script: |
+            set -eu
+
+            update_repo() {
+              repo_url="$1"
+              target_dir="$2"
+
+              if [ ! -d "$target_dir/.git" ]; then
+                git clone "$repo_url" "$target_dir"
+              fi
+
+              git -C "$target_dir" fetch --all --prune
+              branch="$(git -C "$target_dir" remote show origin | sed -n '/HEAD branch/s/.*: //p')"
+              git -C "$target_dir" checkout "$branch"
+              git -C "$target_dir" pull --ff-only origin "$branch"
+            }
+
+            mkdir -p /opt
+            update_repo https://github.com/shoumq/soundcloud /opt/soundcloud
+            update_repo https://github.com/shoumq/soundcloud-front /opt/soundcloud-front
+
+            if [ ! -f /opt/soundcloud/.env.production ]; then
+              cp /opt/soundcloud/.env.production.example /opt/soundcloud/.env.production
+            fi
+
+            cd /opt/soundcloud
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
