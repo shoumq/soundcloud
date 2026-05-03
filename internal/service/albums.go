@@ -8,15 +8,19 @@ import (
 
 	"soundcloud/internal/domain"
 	"soundcloud/internal/repository"
+	"soundcloud/internal/storage"
 )
 
 type AlbumService struct {
 	albums repository.AlbumRepository
 	tracks repository.TrackRepository
+	users  repository.UserRepository
+	store  storage.AudioStorage
+	ytdlp  string
 }
 
-func NewAlbumService(albums repository.AlbumRepository, tracks repository.TrackRepository) *AlbumService {
-	return &AlbumService{albums: albums, tracks: tracks}
+func NewAlbumService(albums repository.AlbumRepository, tracks repository.TrackRepository, users repository.UserRepository, store storage.AudioStorage, ytdlp string) *AlbumService {
+	return &AlbumService{albums: albums, tracks: tracks, users: users, store: store, ytdlp: ytdlp}
 }
 
 func (s *AlbumService) Create(ctx context.Context, ownerID, title, description string) (domain.Album, error) {

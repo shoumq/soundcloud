@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS tracks (
 	cover_content_type TEXT NOT NULL DEFAULT '',
 	cover_size BIGINT NOT NULL DEFAULT 0,
 	cover_storage_key TEXT NOT NULL DEFAULT '',
+	artwork_url TEXT NOT NULL DEFAULT '',
+	source_provider TEXT NOT NULL DEFAULT '',
+	source_url TEXT NOT NULL DEFAULT '',
+	embed_html TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -77,6 +81,10 @@ CREATE TABLE IF NOT EXISTS albums (
 	owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
+	artwork_url TEXT NOT NULL DEFAULT '',
+	source_provider TEXT NOT NULL DEFAULT '',
+	source_url TEXT NOT NULL DEFAULT '',
+	embed_html TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -85,6 +93,14 @@ ALTER TABLE tracks ADD COLUMN IF NOT EXISTS cover_filename TEXT NOT NULL DEFAULT
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS cover_content_type TEXT NOT NULL DEFAULT '';
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS cover_size BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE tracks ADD COLUMN IF NOT EXISTS cover_storage_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS artwork_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS source_provider TEXT NOT NULL DEFAULT '';
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS source_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS embed_html TEXT NOT NULL DEFAULT '';
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS artwork_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS source_provider TEXT NOT NULL DEFAULT '';
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS source_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS embed_html TEXT NOT NULL DEFAULT '';
 
 DO $$
 BEGIN
@@ -281,17 +297,19 @@ func (r *Postgres) CreateTrack(ctx context.Context, track domain.Track) error {
 	_, err := r.db.Exec(ctx, `
 INSERT INTO tracks (
 	id, owner_id, album_id, title, artist, filename, content_type, size, storage_key,
-	cover_filename, cover_content_type, cover_size, cover_storage_key, created_at
+	cover_filename, cover_content_type, cover_size, cover_storage_key, artwork_url,
+	source_provider, source_url, embed_html, created_at
 )
-VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-`, track.ID, track.OwnerID, track.AlbumID, track.Title, track.Artist, track.Filename, track.ContentType, track.Size, track.StorageKey, track.CoverFilename, track.CoverContentType, track.CoverSize, track.CoverStorageKey, track.CreatedAt)
+VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+`, track.ID, track.OwnerID, track.AlbumID, track.Title, track.Artist, track.Filename, track.ContentType, track.Size, track.StorageKey, track.CoverFilename, track.CoverContentType, track.CoverSize, track.CoverStorageKey, track.ArtworkURL, track.SourceProvider, track.SourceURL, track.EmbedHTML, track.CreatedAt)
 	return mapPostgresError(err)
 }
 
 func (r *Postgres) FindTrackByID(ctx context.Context, id string) (domain.Track, error) {
 	row := r.db.QueryRow(ctx, `
 SELECT id, owner_id, COALESCE(album_id, ''), title, artist, filename, content_type, size, storage_key,
-	cover_filename, cover_content_type, cover_size, cover_storage_key, created_at
+	cover_filename, cover_content_type, cover_size, cover_storage_key, artwork_url,
+	source_provider, source_url, embed_html, created_at
 FROM tracks
 WHERE id = $1
 `, id)
@@ -301,7 +319,8 @@ WHERE id = $1
 func (r *Postgres) ListTracks(ctx context.Context) ([]domain.Track, error) {
 	rows, err := r.db.Query(ctx, `
 SELECT id, owner_id, COALESCE(album_id, ''), title, artist, filename, content_type, size, storage_key,
-	cover_filename, cover_content_type, cover_size, cover_storage_key, created_at
+	cover_filename, cover_content_type, cover_size, cover_storage_key, artwork_url,
+	source_provider, source_url, embed_html, created_at
 FROM tracks
 ORDER BY created_at DESC
 `)
@@ -328,7 +347,8 @@ ORDER BY created_at DESC
 func (r *Postgres) ListTracksByAlbumID(ctx context.Context, albumID string) ([]domain.Track, error) {
 	rows, err := r.db.Query(ctx, `
 SELECT id, owner_id, COALESCE(album_id, ''), title, artist, filename, content_type, size, storage_key,
-	cover_filename, cover_content_type, cover_size, cover_storage_key, created_at
+	cover_filename, cover_content_type, cover_size, cover_storage_key, artwork_url,
+	source_provider, source_url, embed_html, created_at
 FROM tracks
 WHERE album_id = $1
 ORDER BY created_at DESC
@@ -356,7 +376,8 @@ ORDER BY created_at DESC
 func (r *Postgres) ListTracksByOwnerID(ctx context.Context, ownerID string) ([]domain.Track, error) {
 	rows, err := r.db.Query(ctx, `
 SELECT id, owner_id, COALESCE(album_id, ''), title, artist, filename, content_type, size, storage_key,
-	cover_filename, cover_content_type, cover_size, cover_storage_key, created_at
+	cover_filename, cover_content_type, cover_size, cover_storage_key, artwork_url,
+	source_provider, source_url, embed_html, created_at
 FROM tracks
 WHERE owner_id = $1
 ORDER BY created_at DESC
@@ -392,15 +413,15 @@ WHERE owner_id = $1
 
 func (r *Postgres) CreateAlbum(ctx context.Context, album domain.Album) error {
 	_, err := r.db.Exec(ctx, `
-INSERT INTO albums (id, owner_id, title, description, created_at)
-VALUES ($1, $2, $3, $4, $5)
-`, album.ID, album.OwnerID, album.Title, album.Description, album.CreatedAt)
+INSERT INTO albums (id, owner_id, title, description, artwork_url, source_provider, source_url, embed_html, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+`, album.ID, album.OwnerID, album.Title, album.Description, album.ArtworkURL, album.SourceProvider, album.SourceURL, album.EmbedHTML, album.CreatedAt)
 	return mapPostgresError(err)
 }
 
 func (r *Postgres) FindAlbumByID(ctx context.Context, id string) (domain.Album, error) {
 	row := r.db.QueryRow(ctx, `
-SELECT id, owner_id, title, description, created_at
+SELECT id, owner_id, title, description, artwork_url, source_provider, source_url, embed_html, created_at
 FROM albums
 WHERE id = $1
 `, id)
@@ -409,7 +430,7 @@ WHERE id = $1
 
 func (r *Postgres) ListAlbums(ctx context.Context) ([]domain.Album, error) {
 	rows, err := r.db.Query(ctx, `
-SELECT id, owner_id, title, description, created_at
+SELECT id, owner_id, title, description, artwork_url, source_provider, source_url, embed_html, created_at
 FROM albums
 ORDER BY created_at DESC
 `)
@@ -527,6 +548,10 @@ func scanTrack(row scanner) (domain.Track, error) {
 		&track.CoverContentType,
 		&track.CoverSize,
 		&track.CoverStorageKey,
+		&track.ArtworkURL,
+		&track.SourceProvider,
+		&track.SourceURL,
+		&track.EmbedHTML,
 		&track.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -537,7 +562,17 @@ func scanTrack(row scanner) (domain.Track, error) {
 
 func scanAlbum(row scanner) (domain.Album, error) {
 	var album domain.Album
-	err := row.Scan(&album.ID, &album.OwnerID, &album.Title, &album.Description, &album.CreatedAt)
+	err := row.Scan(
+		&album.ID,
+		&album.OwnerID,
+		&album.Title,
+		&album.Description,
+		&album.ArtworkURL,
+		&album.SourceProvider,
+		&album.SourceURL,
+		&album.EmbedHTML,
+		&album.CreatedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Album{}, ErrNotFound
 	}

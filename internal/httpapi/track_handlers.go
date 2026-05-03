@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 
 	"soundcloud/internal/repository"
 )
+
+type importSoundCloudTrackRequest struct {
+	URL     string `json:"url"`
+	AlbumID string `json:"album_id"`
+}
 
 func (h *Handler) uploadTrack(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromContext(r.Context())
@@ -50,6 +56,28 @@ func (h *Handler) uploadTrack(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, track)
 }
 
+func (h *Handler) importSoundCloudTrack(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req importSoundCloudTrackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	track, err := h.tracks.ImportSoundCloud(r.Context(), userID, req.URL, req.AlbumID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, track)
+}
+
 func (h *Handler) listTracks(w http.ResponseWriter, r *http.Request) {
 	tracks, err := h.tracks.List(r.Context())
 	if err != nil {
@@ -75,7 +103,22 @@ func (h *Handler) getTrack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) streamTrack(w http.ResponseWriter, r *http.Request) {
-	track, reader, err := h.tracks.Open(r.Context(), chi.URLParam(r, "id"))
+	id := chi.URLParam(r, "id")
+	foundTrack, err := h.tracks.Find(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "track not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get track")
+		return
+	}
+	if foundTrack.StorageKey == "" {
+		writeError(w, http.StatusNotFound, "audio file not found")
+		return
+	}
+
+	track, reader, err := h.tracks.Open(r.Context(), id)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "track not found")
 		return

@@ -37,13 +37,21 @@ type Track struct {
 	CoverContentType string    `json:"cover_content_type,omitempty"`
 	CoverSize        int64     `json:"cover_size,omitempty"`
 	CoverStorageKey  string    `json:"-"`
+	ArtworkURL       string    `json:"artwork_url,omitempty"`
+	SourceProvider   string    `json:"source_provider,omitempty"`
+	SourceURL        string    `json:"source_url,omitempty"`
+	EmbedHTML        string    `json:"embed_html,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
 type Album struct {
-	ID          string    `json:"id"`
-	OwnerID     string    `json:"owner_id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	OwnerID        string    `json:"owner_id"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description,omitempty"`
+	ArtworkURL     string    `json:"artwork_url,omitempty"`
+	SourceProvider string    `json:"source_provider,omitempty"`
+	SourceURL      string    `json:"source_url,omitempty"`
+	EmbedHTML      string    `json:"embed_html,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }

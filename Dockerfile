@@ -12,6 +12,9 @@ FROM alpine:3.20
 
 WORKDIR /app
 
+RUN apk add --no-cache ca-certificates ffmpeg python3 py3-pip \
+	&& pip3 install --break-system-packages --no-cache-dir yt-dlp
+
 COPY --from=build /bin/soundcloud-api /bin/soundcloud-api
 
 EXPOSE 8080

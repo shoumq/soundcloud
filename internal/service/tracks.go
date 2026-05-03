@@ -19,10 +19,11 @@ type TrackService struct {
 	users   repository.UserRepository
 	albums  repository.AlbumRepository
 	storage storage.AudioStorage
+	ytdlp   string
 }
 
-func NewTrackService(tracks repository.TrackRepository, users repository.UserRepository, albums repository.AlbumRepository, storage storage.AudioStorage) *TrackService {
-	return &TrackService{tracks: tracks, users: users, albums: albums, storage: storage}
+func NewTrackService(tracks repository.TrackRepository, users repository.UserRepository, albums repository.AlbumRepository, storage storage.AudioStorage, ytdlp string) *TrackService {
+	return &TrackService{tracks: tracks, users: users, albums: albums, storage: storage, ytdlp: ytdlp}
 }
 
 func (s *TrackService) Upload(ctx context.Context, ownerID, title, albumID string, file multipart.File, header *multipart.FileHeader, cover multipart.File, coverHeader *multipart.FileHeader) (domain.Track, error) {
@@ -123,6 +124,9 @@ func (s *TrackService) Open(ctx context.Context, id string) (domain.Track, io.Re
 	track, err := s.tracks.FindByID(ctx, id)
 	if err != nil {
 		return domain.Track{}, nil, err
+	}
+	if track.StorageKey == "" {
+		return domain.Track{}, nil, errors.New("track does not have a local audio file")
 	}
 
 	reader, err := s.storage.Open(ctx, track.StorageKey)

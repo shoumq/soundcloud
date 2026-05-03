@@ -15,6 +15,10 @@ type albumRequest struct {
 	Description string `json:"description"`
 }
 
+type importSoundCloudAlbumRequest struct {
+	URL string `json:"url"`
+}
+
 func (h *Handler) createAlbum(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromContext(r.Context())
 	if !ok {
@@ -29,6 +33,28 @@ func (h *Handler) createAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	album, err := h.albums.Create(r.Context(), userID, req.Title, req.Description)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, album)
+}
+
+func (h *Handler) importSoundCloudAlbum(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req importSoundCloudAlbumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	album, err := h.albums.ImportSoundCloud(r.Context(), userID, req.URL)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

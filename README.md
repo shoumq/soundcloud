@@ -4,6 +4,7 @@ Backend MVP с тремя основными модулями:
 
 - авторизация: регистрация, логин, JWT;
 - загрузка музыки: multipart upload аудиофайла;
+- импорт SoundCloud: скачивание трека или альбома/плейлиста по ссылке через `yt-dlp`;
 - прослушивание: metadata API и streaming endpoint с поддержкой `Range`.
 
 Сейчас metadata пользователей и треков хранится в Postgres, а аудиофайлы лежат в MinIO/S3 или локальной папке.
@@ -59,6 +60,9 @@ S3_USE_SSL=false
 
 Если API запущен внутри `docker compose`, S3 endpoint должен быть `minio:9000`. Если API запущен через `go run` на хосте, endpoint должен быть `localhost:9000`.
 
+Для импорта SoundCloud при локальном запуске без Docker на хосте должны быть доступны `yt-dlp` и `ffmpeg`.
+Путь к бинарнику `yt-dlp` можно переопределить через `YT_DLP_BINARY`.
+
 ## API
 
 ### Регистрация
@@ -95,6 +99,35 @@ curl.exe -X POST http://localhost:8080/api/v1/tracks `
   -F "artist=Demo Artist" `
   -F "audio=@D:\music\track.mp3"
 ```
+
+### Импорт трека из SoundCloud
+
+```http
+POST /api/v1/tracks/import/soundcloud
+Authorization: Bearer <JWT>
+Content-Type: application/json
+
+{
+  "url": "https://soundcloud.com/artist/track",
+  "album_id": ""
+}
+```
+
+API скачивает аудио, конвертирует его в mp3 и сохраняет в тот же storage, что и обычные загрузки.
+
+### Импорт альбома или плейлиста из SoundCloud
+
+```http
+POST /api/v1/albums/import/soundcloud
+Authorization: Bearer <JWT>
+Content-Type: application/json
+
+{
+  "url": "https://soundcloud.com/artist/sets/album"
+}
+```
+
+API создает альбом и последовательно скачивает его треки.
 
 ### Список треков
 

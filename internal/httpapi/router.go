@@ -61,7 +61,9 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware(cfg.JWTSecret))
 			r.Post("/tracks", h.uploadTrack)
+			r.Post("/tracks/import/soundcloud", h.importSoundCloudTrack)
 			r.Post("/albums", h.createAlbum)
+			r.Post("/albums/import/soundcloud", h.importSoundCloudAlbum)
 			r.Get("/me", h.getMe)
 			r.Patch("/me", h.updateMe)
 			r.Patch("/me/privacy", h.updatePrivacy)

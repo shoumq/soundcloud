@@ -48,8 +48,8 @@ func main() {
 	authService := service.NewAuthService(pg, cfg.JWTSecret, cfg.TelegramBotToken)
 	trackRepository := pg.CreateTrackRepository()
 	albumRepository := pg.CreateAlbumRepository()
-	trackService := service.NewTrackService(trackRepository, pg, albumRepository, fileStorage)
-	albumService := service.NewAlbumService(albumRepository, trackRepository)
+	trackService := service.NewTrackService(trackRepository, pg, albumRepository, fileStorage, cfg.YTDLPBinary)
+	albumService := service.NewAlbumService(albumRepository, trackRepository, pg, fileStorage, cfg.YTDLPBinary)
 	profileService := service.NewProfileService(pg, trackRepository, fileStorage)
 
 	router := httpapi.NewRouter(httpapi.RouterConfig{
