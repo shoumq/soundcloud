@@ -93,4 +93,6 @@ jobs:
 
             cd /opt/soundcloud
             docker compose -p soundcloud -f docker-compose.prod.yml down --remove-orphans || true
+            docker rm -f soundcloud-frontend-1 soundcloud-api-1 soundcloud-postgres-1 soundcloud-minio-1 || true
+            docker network rm soundcloud_default || true
             docker compose -p soundcloud -f docker-compose.prod.yml up -d --build --remove-orphans
