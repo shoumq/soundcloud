@@ -70,12 +70,19 @@ jobs:
             update_repo() {
               repo_url="$1"
               target_dir="$2"
+              target_ref="${3:-}"
 
               if [ ! -d "$target_dir/.git" ]; then
                 git clone "$repo_url" "$target_dir"
               fi
 
               git -C "$target_dir" fetch --all --prune
+
+              if [ -n "$target_ref" ]; then
+                git -C "$target_dir" checkout --detach "$target_ref"
+                return
+              fi
+
               branch="$(git -C "$target_dir" remote show origin | sed -n '/HEAD branch/s/.*: //p')"
               git -C "$target_dir" reset --hard
               git -C "$target_dir" clean -fd
@@ -84,7 +91,7 @@ jobs:
             }
 
             mkdir -p /opt
-            update_repo https://github.com/shoumq/soundcloud.git /opt/soundcloud
+            update_repo https://github.com/shoumq/soundcloud.git /opt/soundcloud "${{ github.sha }}"
             update_repo https://github.com/shoumq/soundcloud-front.git /opt/soundcloud-front
 
             if [ ! -f /opt/soundcloud/.env.production ]; then
