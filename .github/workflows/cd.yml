@@ -93,6 +93,12 @@ jobs:
 
             cd /opt/soundcloud
             docker compose -p soundcloud -f docker-compose.prod.yml down --remove-orphans || true
-            docker rm -f soundcloud-frontend-1 soundcloud-api-1 soundcloud-postgres-1 soundcloud-minio-1 || true
-            docker network rm soundcloud_default || true
+            stale_containers="$(docker ps -aq --filter "name=^/soundcloud-")"
+            if [ -n "$stale_containers" ]; then
+              docker rm -f $stale_containers
+            fi
+            stale_networks="$(docker network ls -q --filter "name=^soundcloud(_default)?$")"
+            if [ -n "$stale_networks" ]; then
+              docker network rm $stale_networks || true
+            fi
             docker compose -p soundcloud -f docker-compose.prod.yml up -d --build --remove-orphans
