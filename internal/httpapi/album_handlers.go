@@ -54,13 +54,28 @@ func (h *Handler) importSoundCloudAlbum(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	album, err := h.albums.ImportSoundCloud(r.Context(), userID, req.URL)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	job := h.imports.StartSoundCloudAlbumImport(userID, req.URL)
+	writeJSON(w, http.StatusAccepted, job)
+}
+
+func (h *Handler) getAlbumImportJob(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, album)
+	job, err := h.imports.Get(chi.URLParam(r, "id"), userID)
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "import job not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get import job")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, job)
 }
 
 func (h *Handler) listAlbums(w http.ResponseWriter, r *http.Request) {

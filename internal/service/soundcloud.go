@@ -1,10 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -36,6 +39,11 @@ type downloadedSoundCloudTrack struct {
 	info soundCloudInfo
 	path string
 	size int64
+}
+
+type downloadedSoundCloudAlbumResult struct {
+	tracks   []downloadedSoundCloudTrack
+	failures []error
 }
 
 func validateSoundCloudURL(rawURL string) (string, error) {
@@ -119,36 +127,92 @@ func soundCloudAlbumDescription(info soundCloudInfo) string {
 	return "SoundCloud: " + artist
 }
 
-func fetchSoundCloudInfo(ctx context.Context, binary, rawURL string, noPlaylist bool) (soundCloudInfo, string, error) {
+type soundCloudFetchOptions struct {
+	noPlaylist   bool
+	flatPlaylist bool
+	timeout      time.Duration
+}
+
+func fetchSoundCloudInfo(ctx context.Context, binary, rawURL string, opts soundCloudFetchOptions) (soundCloudInfo, string, error) {
 	canonicalURL, err := validateSoundCloudURL(rawURL)
 	if err != nil {
 		return soundCloudInfo{}, "", err
 	}
 
 	args := []string{"--dump-single-json", "--no-warnings"}
-	if noPlaylist {
+	if opts.noPlaylist {
 		args = append(args, "--no-playlist")
+	}
+	if opts.flatPlaylist {
+		args = append(args, "--flat-playlist")
 	}
 	args = append(args, canonicalURL)
 
-	cmdCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	timeout := opts.timeout
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	output, err := exec.CommandContext(cmdCtx, soundCloudBinary(binary), args...).Output()
+	cmd := exec.CommandContext(cmdCtx, soundCloudBinary(binary), args...)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return soundCloudInfo{}, "", fmt.Errorf("failed to fetch soundcloud metadata with yt-dlp: %w", err)
+		return soundCloudInfo{}, "", err
+	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return soundCloudInfo{}, "", fmt.Errorf("failed to start yt-dlp: %w", err)
+	}
+
+	output, readErr := io.ReadAll(stdout)
+	waitErr := cmd.Wait()
+
+	if readErr != nil {
+		return soundCloudInfo{}, "", fmt.Errorf("failed to read soundcloud metadata output: %w", readErr)
+	}
+	if waitErr != nil {
+		if errors.Is(cmdCtx.Err(), context.DeadlineExceeded) {
+			return soundCloudInfo{}, "", fmt.Errorf("failed to fetch soundcloud metadata with yt-dlp: timed out after %s", timeout)
+		}
+
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = strings.TrimSpace(string(output))
+		}
+		if message == "" {
+			message = waitErr.Error()
+		}
+		return soundCloudInfo{}, "", fmt.Errorf("failed to fetch soundcloud metadata with yt-dlp: %s", message)
 	}
 
 	var info soundCloudInfo
-	if err := json.Unmarshal(output, &info); err != nil {
-		return soundCloudInfo{}, "", errors.New("failed to parse soundcloud metadata")
+	if err := json.Unmarshal(bytes.TrimSpace(output), &info); err != nil {
+		snippet := strings.TrimSpace(string(output))
+		if len(snippet) > 240 {
+			snippet = snippet[:240]
+		}
+		if snippet == "" {
+			snippet = strings.TrimSpace(stderr.String())
+		}
+		if snippet == "" {
+			snippet = err.Error()
+		}
+		return soundCloudInfo{}, "", fmt.Errorf("failed to parse soundcloud metadata: %s", snippet)
 	}
 
 	return info, soundCloudInfoURL(info, canonicalURL), nil
 }
 
 func downloadSoundCloudTrack(ctx context.Context, binary, sourceURL, trackID string) (downloadedSoundCloudTrack, error) {
-	info, canonicalURL, err := fetchSoundCloudInfo(ctx, binary, sourceURL, true)
+	info, canonicalURL, err := fetchSoundCloudInfo(ctx, binary, sourceURL, soundCloudFetchOptions{
+		noPlaylist: true,
+		timeout:    45 * time.Second,
+	})
 	if err != nil {
 		return downloadedSoundCloudTrack{}, err
 	}
@@ -207,6 +271,101 @@ func downloadSoundCloudTrack(ctx context.Context, binary, sourceURL, trackID str
 
 	info.WebpageURL = canonicalURL
 	return downloadedSoundCloudTrack{info: info, path: matches[0], size: stat.Size()}, nil
+}
+
+func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string, entries []soundCloudInfo) (downloadedSoundCloudAlbumResult, func(), error) {
+	tmpDir, err := os.MkdirTemp("", "soundcloud-album-import-*")
+	if err != nil {
+		return downloadedSoundCloudAlbumResult{}, nil, err
+	}
+
+	cleanup := func() {
+		_ = os.RemoveAll(tmpDir)
+	}
+
+	outputTemplate := filepath.Join(tmpDir, "%(playlist_index)s-%(id)s.%(ext)s")
+	args := []string{
+		"--yes-playlist",
+		"--no-warnings",
+		"--ignore-errors",
+		"--extract-audio",
+		"--audio-format", "mp3",
+		"--audio-quality", "0",
+		"-o", outputTemplate,
+		sourceURL,
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
+	defer cancel()
+
+	output, cmdErr := exec.CommandContext(cmdCtx, soundCloudBinary(binary), args...).CombinedOutput()
+	filesByTrackID := make(map[string]string, len(entries))
+
+	walkErr := filepath.WalkDir(tmpDir, func(filePath string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || strings.ToLower(filepath.Ext(filePath)) != ".mp3" {
+			return err
+		}
+
+		base := strings.TrimSuffix(filepath.Base(filePath), ".mp3")
+		parts := strings.SplitN(base, "-", 2)
+		if len(parts) != 2 {
+			return nil
+		}
+
+		filesByTrackID[parts[1]] = filePath
+		return nil
+	})
+	if walkErr != nil {
+		cleanup()
+		return downloadedSoundCloudAlbumResult{}, nil, walkErr
+	}
+
+	result := downloadedSoundCloudAlbumResult{
+		tracks:   make([]downloadedSoundCloudTrack, 0, len(entries)),
+		failures: make([]error, 0),
+	}
+
+	for index, entry := range entries {
+		trackPath, ok := filesByTrackID[strings.TrimSpace(entry.ID)]
+		if !ok {
+			result.failures = append(result.failures, fmt.Errorf("track %d was not downloaded", index+1))
+			continue
+		}
+
+		stat, err := os.Stat(trackPath)
+		if err != nil {
+			result.failures = append(result.failures, fmt.Errorf("track %d stat failed: %w", index+1, err))
+			continue
+		}
+		if stat.Size() == 0 {
+			result.failures = append(result.failures, fmt.Errorf("track %d file is empty", index+1))
+			continue
+		}
+		if stat.Size() > 100<<20 {
+			result.failures = append(result.failures, fmt.Errorf("track %d file is too large", index+1))
+			continue
+		}
+
+		result.tracks = append(result.tracks, downloadedSoundCloudTrack{
+			info: entry,
+			path: trackPath,
+			size: stat.Size(),
+		})
+	}
+
+	if len(result.tracks) == 0 {
+		cleanup()
+		message := strings.TrimSpace(string(output))
+		if message == "" && cmdErr != nil {
+			message = cmdErr.Error()
+		}
+		if message == "" {
+			message = "no album tracks were downloaded"
+		}
+		return downloadedSoundCloudAlbumResult{}, nil, fmt.Errorf("failed to download soundcloud album: %s", message)
+	}
+
+	return result, cleanup, nil
 }
 
 func saveDownloadedSoundCloudTrack(ctx context.Context, s *TrackService, ownerID, albumID, trackID string, downloaded downloadedSoundCloudTrack) (domain.Track, error) {
@@ -276,7 +435,10 @@ func (s *AlbumService) ImportSoundCloud(ctx context.Context, ownerID, sourceURL 
 		return domain.Album{}, err
 	}
 
-	info, canonicalURL, err := fetchSoundCloudInfo(ctx, s.ytdlp, sourceURL, false)
+	info, canonicalURL, err := fetchSoundCloudInfo(ctx, s.ytdlp, sourceURL, soundCloudFetchOptions{
+		flatPlaylist: true,
+		timeout:      3 * time.Minute,
+	})
 	if err != nil {
 		return domain.Album{}, err
 	}
@@ -302,22 +464,33 @@ func (s *AlbumService) ImportSoundCloud(ctx context.Context, ownerID, sourceURL 
 	}
 
 	trackService := &TrackService{tracks: s.tracks, users: s.users, albums: s.albums, storage: s.store, ytdlp: s.ytdlp}
-	for index, entry := range info.Entries {
-		entryURL := soundCloudInfoURL(entry, "")
-		if entryURL == "" {
+	downloadedAlbum, cleanup, err := downloadSoundCloudAlbumTracks(ctx, s.ytdlp, canonicalURL, info.Entries)
+	if err != nil {
+		return domain.Album{}, err
+	}
+	defer cleanup()
+
+	importedCount := 0
+	for _, downloaded := range downloadedAlbum.tracks {
+		trackID := newID()
+		if strings.TrimSpace(downloaded.info.Thumbnail) == "" {
+			downloaded.info.Thumbnail = info.Thumbnail
+		}
+		if strings.TrimSpace(downloaded.info.Artist) == "" && strings.TrimSpace(downloaded.info.Uploader) == "" && strings.TrimSpace(downloaded.info.Creator) == "" {
+			downloaded.info.Artist = soundCloudArtist(info)
+		}
+		if strings.TrimSpace(downloaded.info.WebpageURL) == "" {
+			downloaded.info.WebpageURL = soundCloudInfoURL(downloaded.info, canonicalURL)
+		}
+		if _, err := saveDownloadedSoundCloudTrack(ctx, trackService, ownerID, album.ID, trackID, downloaded); err != nil {
+			downloadedAlbum.failures = append(downloadedAlbum.failures, fmt.Errorf("failed to save %q: %w", soundCloudTitle(downloaded.info), err))
 			continue
 		}
+		importedCount++
+	}
 
-		trackID := newID()
-		downloaded, err := downloadSoundCloudTrack(ctx, s.ytdlp, entryURL, trackID)
-		if err != nil {
-			return domain.Album{}, fmt.Errorf("failed to import album track %d: %w", index+1, err)
-		}
-		_, saveErr := saveDownloadedSoundCloudTrack(ctx, trackService, ownerID, album.ID, trackID, downloaded)
-		os.RemoveAll(filepath.Dir(downloaded.path))
-		if saveErr != nil {
-			return domain.Album{}, fmt.Errorf("failed to save album track %d: %w", index+1, saveErr)
-		}
+	if importedCount == 0 {
+		return domain.Album{}, errors.New("soundcloud album import failed: no tracks were saved")
 	}
 
 	return album, nil

@@ -14,6 +14,7 @@ type RouterConfig struct {
 	Auth           *service.AuthService
 	Tracks         *service.TrackService
 	Albums         *service.AlbumService
+	Imports        *service.ImportJobService
 	Profiles       *service.ProfileService
 	JWTSecret      string
 	AllowedOrigins []string
@@ -24,11 +25,12 @@ type Handler struct {
 	auth     *service.AuthService
 	tracks   *service.TrackService
 	albums   *service.AlbumService
+	imports  *service.ImportJobService
 	profiles *service.ProfileService
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
-	h := &Handler{auth: cfg.Auth, tracks: cfg.Tracks, albums: cfg.Albums, profiles: cfg.Profiles}
+	h := &Handler{auth: cfg.Auth, tracks: cfg.Tracks, albums: cfg.Albums, imports: cfg.Imports, profiles: cfg.Profiles}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -66,6 +68,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			r.Delete("/tracks/{id}/like", h.unlikeTrack)
 			r.Post("/albums", h.createAlbum)
 			r.Post("/albums/import/soundcloud", h.importSoundCloudAlbum)
+			r.Get("/imports/albums/{id}", h.getAlbumImportJob)
 			r.Get("/me", h.getMe)
 			r.Patch("/me", h.updateMe)
 			r.Patch("/me/privacy", h.updatePrivacy)

@@ -50,12 +50,14 @@ func main() {
 	albumRepository := pg.CreateAlbumRepository()
 	trackService := service.NewTrackService(trackRepository, pg, albumRepository, fileStorage, cfg.YTDLPBinary)
 	albumService := service.NewAlbumService(albumRepository, trackRepository, pg, fileStorage, cfg.YTDLPBinary)
+	importJobService := service.NewImportJobService(albumService)
 	profileService := service.NewProfileService(pg, trackRepository, fileStorage)
 
 	router := httpapi.NewRouter(httpapi.RouterConfig{
 		Auth:           authService,
 		Tracks:         trackService,
 		Albums:         albumService,
+		Imports:        importJobService,
 		Profiles:       profileService,
 		JWTSecret:      cfg.JWTSecret,
 		AllowedOrigins: cfg.AllowedOrigins,
