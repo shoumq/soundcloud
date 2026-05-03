@@ -35,6 +35,10 @@ type TrackRepository interface {
 	ListByAlbumID(ctx context.Context, albumID string) ([]domain.Track, error)
 	ListByOwnerID(ctx context.Context, ownerID string) ([]domain.Track, error)
 	UpdateArtistByOwnerID(ctx context.Context, ownerID, artist string) error
+	Like(ctx context.Context, userID, trackID string) error
+	Unlike(ctx context.Context, userID, trackID string) error
+	CountLikesByTrackIDs(ctx context.Context, trackIDs []string) (map[string]int, error)
+	ListLikedTrackIDs(ctx context.Context, userID string, trackIDs []string) (map[string]struct{}, error)
 }
 
 type AlbumRepository interface {

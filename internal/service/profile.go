@@ -79,6 +79,10 @@ func (s *ProfileService) profile(ctx context.Context, viewerID, targetUserID str
 		if err != nil {
 			return UserProfile{}, err
 		}
+		tracks, err = enrichTracksWithLikes(ctx, s.tracks, viewerID, tracks)
+		if err != nil {
+			return UserProfile{}, err
+		}
 	}
 
 	return UserProfile{

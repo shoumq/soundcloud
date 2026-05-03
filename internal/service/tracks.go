@@ -113,11 +113,34 @@ func (s *TrackService) Upload(ctx context.Context, ownerID, title, albumID strin
 }
 
 func (s *TrackService) List(ctx context.Context) ([]domain.Track, error) {
-	return s.tracks.List(ctx)
+	return s.ListForViewer(ctx, "")
+}
+
+func (s *TrackService) ListForViewer(ctx context.Context, viewerID string) ([]domain.Track, error) {
+	tracks, err := s.tracks.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return enrichTracksWithLikes(ctx, s.tracks, viewerID, tracks)
 }
 
 func (s *TrackService) Find(ctx context.Context, id string) (domain.Track, error) {
-	return s.tracks.FindByID(ctx, id)
+	return s.FindForViewer(ctx, "", id)
+}
+
+func (s *TrackService) FindForViewer(ctx context.Context, viewerID, id string) (domain.Track, error) {
+	track, err := s.tracks.FindByID(ctx, id)
+	if err != nil {
+		return domain.Track{}, err
+	}
+
+	tracks, err := enrichTracksWithLikes(ctx, s.tracks, viewerID, []domain.Track{track})
+	if err != nil {
+		return domain.Track{}, err
+	}
+
+	return tracks[0], nil
 }
 
 func (s *TrackService) Open(ctx context.Context, id string) (domain.Track, io.ReadSeekCloser, error) {
@@ -152,6 +175,34 @@ func (s *TrackService) OpenCover(ctx context.Context, id string) (domain.Track, 
 	}
 
 	return track, reader, nil
+}
+
+func (s *TrackService) Like(ctx context.Context, userID, trackID string) (domain.Track, error) {
+	if userID == "" {
+		return domain.Track{}, errors.New("user id is required")
+	}
+	if _, err := s.tracks.FindByID(ctx, trackID); err != nil {
+		return domain.Track{}, err
+	}
+	if err := s.tracks.Like(ctx, userID, trackID); err != nil {
+		return domain.Track{}, err
+	}
+
+	return s.FindForViewer(ctx, userID, trackID)
+}
+
+func (s *TrackService) Unlike(ctx context.Context, userID, trackID string) (domain.Track, error) {
+	if userID == "" {
+		return domain.Track{}, errors.New("user id is required")
+	}
+	if _, err := s.tracks.FindByID(ctx, trackID); err != nil {
+		return domain.Track{}, err
+	}
+	if err := s.tracks.Unlike(ctx, userID, trackID); err != nil {
+		return domain.Track{}, err
+	}
+
+	return s.FindForViewer(ctx, userID, trackID)
 }
 
 func audioContentType(contentType, filename string) (string, bool) {

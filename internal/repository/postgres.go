@@ -76,6 +76,13 @@ CREATE TABLE IF NOT EXISTS tracks (
 	created_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS track_likes (
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (user_id, track_id)
+);
+
 CREATE TABLE IF NOT EXISTS albums (
 	id TEXT PRIMARY KEY,
 	owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -118,6 +125,8 @@ END $$;
 CREATE INDEX IF NOT EXISTS tracks_created_at_idx ON tracks(created_at DESC);
 CREATE INDEX IF NOT EXISTS tracks_owner_id_idx ON tracks(owner_id);
 CREATE INDEX IF NOT EXISTS tracks_album_id_idx ON tracks(album_id);
+CREATE INDEX IF NOT EXISTS track_likes_track_id_idx ON track_likes(track_id);
+CREATE INDEX IF NOT EXISTS track_likes_user_id_idx ON track_likes(user_id);
 CREATE INDEX IF NOT EXISTS albums_created_at_idx ON albums(created_at DESC);
 CREATE INDEX IF NOT EXISTS albums_owner_id_idx ON albums(owner_id);
 `)
@@ -411,6 +420,79 @@ WHERE owner_id = $1
 	return err
 }
 
+func (r *Postgres) LikeTrack(ctx context.Context, userID, trackID string) error {
+	_, err := r.db.Exec(ctx, `
+INSERT INTO track_likes (user_id, track_id, created_at)
+VALUES ($1, $2, NOW())
+ON CONFLICT (user_id, track_id) DO NOTHING
+`, userID, trackID)
+	return mapPostgresError(err)
+}
+
+func (r *Postgres) UnlikeTrack(ctx context.Context, userID, trackID string) error {
+	_, err := r.db.Exec(ctx, `
+DELETE FROM track_likes
+WHERE user_id = $1 AND track_id = $2
+`, userID, trackID)
+	return err
+}
+
+func (r *Postgres) CountTrackLikesByTrackIDs(ctx context.Context, trackIDs []string) (map[string]int, error) {
+	if len(trackIDs) == 0 {
+		return map[string]int{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+SELECT track_id, COUNT(*)
+FROM track_likes
+WHERE track_id = ANY($1)
+GROUP BY track_id
+`, trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int, len(trackIDs))
+	for rows.Next() {
+		var trackID string
+		var count int
+		if err := rows.Scan(&trackID, &count); err != nil {
+			return nil, err
+		}
+		counts[trackID] = count
+	}
+
+	return counts, rows.Err()
+}
+
+func (r *Postgres) ListLikedTrackIDs(ctx context.Context, userID string, trackIDs []string) (map[string]struct{}, error) {
+	if userID == "" || len(trackIDs) == 0 {
+		return map[string]struct{}{}, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+SELECT track_id
+FROM track_likes
+WHERE user_id = $1 AND track_id = ANY($2)
+`, userID, trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	likedTrackIDs := make(map[string]struct{})
+	for rows.Next() {
+		var trackID string
+		if err := rows.Scan(&trackID); err != nil {
+			return nil, err
+		}
+		likedTrackIDs[trackID] = struct{}{}
+	}
+
+	return likedTrackIDs, rows.Err()
+}
+
 func (r *Postgres) CreateAlbum(ctx context.Context, album domain.Album) error {
 	_, err := r.db.Exec(ctx, `
 INSERT INTO albums (id, owner_id, title, description, artwork_url, source_provider, source_url, embed_html, created_at)
@@ -484,6 +566,22 @@ func (r postgresTrackRepository) ListByOwnerID(ctx context.Context, ownerID stri
 
 func (r postgresTrackRepository) UpdateArtistByOwnerID(ctx context.Context, ownerID, artist string) error {
 	return r.db.UpdateTracksArtistByOwnerID(ctx, ownerID, artist)
+}
+
+func (r postgresTrackRepository) Like(ctx context.Context, userID, trackID string) error {
+	return r.db.LikeTrack(ctx, userID, trackID)
+}
+
+func (r postgresTrackRepository) Unlike(ctx context.Context, userID, trackID string) error {
+	return r.db.UnlikeTrack(ctx, userID, trackID)
+}
+
+func (r postgresTrackRepository) CountLikesByTrackIDs(ctx context.Context, trackIDs []string) (map[string]int, error) {
+	return r.db.CountTrackLikesByTrackIDs(ctx, trackIDs)
+}
+
+func (r postgresTrackRepository) ListLikedTrackIDs(ctx context.Context, userID string, trackIDs []string) (map[string]struct{}, error) {
+	return r.db.ListLikedTrackIDs(ctx, userID, trackIDs)
 }
 
 func (r *Postgres) CreateAlbumRepository() AlbumRepository {

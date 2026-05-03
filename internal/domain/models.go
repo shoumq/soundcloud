@@ -41,6 +41,8 @@ type Track struct {
 	SourceProvider   string    `json:"source_provider,omitempty"`
 	SourceURL        string    `json:"source_url,omitempty"`
 	EmbedHTML        string    `json:"embed_html,omitempty"`
+	LikesCount       int       `json:"likes_count"`
+	LikedByMe        bool      `json:"liked_by_me"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

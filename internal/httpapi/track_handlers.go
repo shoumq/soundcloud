@@ -79,7 +79,8 @@ func (h *Handler) importSoundCloudTrack(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) listTracks(w http.ResponseWriter, r *http.Request) {
-	tracks, err := h.tracks.List(r.Context())
+	viewerID, _ := userIDFromContext(r.Context())
+	tracks, err := h.tracks.ListForViewer(r.Context(), viewerID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list tracks")
 		return
@@ -89,13 +90,54 @@ func (h *Handler) listTracks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getTrack(w http.ResponseWriter, r *http.Request) {
-	track, err := h.tracks.Find(r.Context(), chi.URLParam(r, "id"))
+	viewerID, _ := userIDFromContext(r.Context())
+	track, err := h.tracks.FindForViewer(r.Context(), viewerID, chi.URLParam(r, "id"))
 	if errors.Is(err, repository.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "track not found")
 		return
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to get track")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, track)
+}
+
+func (h *Handler) likeTrack(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	track, err := h.tracks.Like(r.Context(), userID, chi.URLParam(r, "id"))
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "track not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, track)
+}
+
+func (h *Handler) unlikeTrack(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	track, err := h.tracks.Unlike(r.Context(), userID, chi.URLParam(r, "id"))
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "track not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
