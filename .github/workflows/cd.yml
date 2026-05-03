@@ -92,4 +92,5 @@ jobs:
             fi
 
             cd /opt/soundcloud
-            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker compose -p soundcloud -f docker-compose.prod.yml down --remove-orphans || true
+            docker compose -p soundcloud -f docker-compose.prod.yml up -d --build --remove-orphans

@@ -1,3 +1,5 @@
+name: soundcloud
+
 services:
   frontend:
     build: ../soundcloud-front
