@@ -3,12 +3,24 @@ package domain
 import "time"
 
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	Username     string    `json:"username"`
-	TelegramID   string    `json:"telegram_id,omitempty"`
-	PasswordHash string    `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                string    `json:"id"`
+	Email             string    `json:"email,omitempty"`
+	Username          string    `json:"username"`
+	Bio               string    `json:"bio,omitempty"`
+	TelegramID        string    `json:"telegram_id,omitempty"`
+	AvatarFilename    string    `json:"avatar_filename,omitempty"`
+	AvatarContentType string    `json:"avatar_content_type,omitempty"`
+	AvatarStorageKey  string    `json:"-"`
+	IsPrivate         bool      `json:"is_private"`
+	ShowEmail         bool      `json:"show_email"`
+	PasswordHash      string    `json:"-"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+type Follow struct {
+	FollowerID string    `json:"follower_id"`
+	FolloweeID string    `json:"followee_id"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Track struct {

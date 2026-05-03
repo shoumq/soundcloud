@@ -166,6 +166,51 @@ func (r *testUserRepository) FindByTelegramID(_ context.Context, telegramID stri
 	return domain.User{}, repository.ErrNotFound
 }
 
+func (r *testUserRepository) Update(_ context.Context, user domain.User) error {
+	r.byID[user.ID] = user
+	r.byEmail[user.Email] = user.ID
+	return nil
+}
+
+func (r *testUserRepository) UpdatePrivacy(_ context.Context, userID string, isPrivate, showEmail bool) error {
+	user, exists := r.byID[userID]
+	if !exists {
+		return repository.ErrNotFound
+	}
+	user.IsPrivate = isPrivate
+	user.ShowEmail = showEmail
+	r.byID[userID] = user
+	return nil
+}
+
+func (r *testUserRepository) ListFollowing(_ context.Context, _ string) ([]domain.User, error) {
+	return nil, nil
+}
+
+func (r *testUserRepository) ListFollowers(_ context.Context, _ string) ([]domain.User, error) {
+	return nil, nil
+}
+
+func (r *testUserRepository) Follow(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (r *testUserRepository) Unfollow(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (r *testUserRepository) IsFollowing(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
+func (r *testUserRepository) CountFollowers(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (r *testUserRepository) CountFollowing(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
 func signedTelegramAuthData(botToken string, values map[string]string) TelegramAuthData {
 	keys := make([]string, 0, len(values))
 	for key := range values {

@@ -14,19 +14,21 @@ type RouterConfig struct {
 	Auth           *service.AuthService
 	Tracks         *service.TrackService
 	Albums         *service.AlbumService
+	Profiles       *service.ProfileService
 	JWTSecret      string
 	AllowedOrigins []string
 	Logger         *slog.Logger
 }
 
 type Handler struct {
-	auth   *service.AuthService
-	tracks *service.TrackService
-	albums *service.AlbumService
+	auth     *service.AuthService
+	tracks   *service.TrackService
+	albums   *service.AlbumService
+	profiles *service.ProfileService
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
-	h := &Handler{auth: cfg.Auth, tracks: cfg.Tracks, albums: cfg.Albums}
+	h := &Handler{auth: cfg.Auth, tracks: cfg.Tracks, albums: cfg.Albums, profiles: cfg.Profiles}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -53,11 +55,19 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		r.Get("/albums", h.listAlbums)
 		r.Get("/albums/{id}", h.getAlbum)
 		r.Get("/albums/{id}/tracks", h.listAlbumTracks)
+		r.With(optionalAuthMiddleware(cfg.JWTSecret)).Get("/users/{id}", h.getUserProfile)
+		r.Get("/users/{id}/avatar", h.streamUserAvatar)
 
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware(cfg.JWTSecret))
 			r.Post("/tracks", h.uploadTrack)
 			r.Post("/albums", h.createAlbum)
+			r.Get("/me", h.getMe)
+			r.Patch("/me", h.updateMe)
+			r.Patch("/me/privacy", h.updatePrivacy)
+			r.Post("/me/avatar", h.uploadAvatar)
+			r.Post("/users/{id}/follow", h.followUser)
+			r.Delete("/users/{id}/follow", h.unfollowUser)
 		})
 	})
 
