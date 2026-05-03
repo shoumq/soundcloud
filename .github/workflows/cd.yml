@@ -77,8 +77,10 @@ jobs:
 
               git -C "$target_dir" fetch --all --prune
               branch="$(git -C "$target_dir" remote show origin | sed -n '/HEAD branch/s/.*: //p')"
-              git -C "$target_dir" checkout "$branch"
-              git -C "$target_dir" pull --ff-only origin "$branch"
+              git -C "$target_dir" reset --hard
+              git -C "$target_dir" clean -fd
+              git -C "$target_dir" checkout -B "$branch" "origin/$branch"
+              git -C "$target_dir" reset --hard "origin/$branch"
             }
 
             mkdir -p /opt
