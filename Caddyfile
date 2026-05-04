@@ -1,0 +1,19 @@
+dropwave.ru, www.dropwave.ru {
+  encode zstd gzip
+
+  handle /api/* {
+    reverse_proxy api:8080
+  }
+
+  handle /health {
+    reverse_proxy api:8080
+  }
+
+  handle /swagger* {
+    reverse_proxy api:8080
+  }
+
+  handle {
+    reverse_proxy frontend:80
+  }
+}
