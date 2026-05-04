@@ -288,6 +288,7 @@ func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string
 		"--yes-playlist",
 		"--no-warnings",
 		"--ignore-errors",
+		"--write-info-json",
 		"--extract-audio",
 		"--audio-format", "mp3",
 		"--audio-quality", "0",
@@ -300,19 +301,41 @@ func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string
 
 	output, cmdErr := exec.CommandContext(cmdCtx, soundCloudBinary(binary), args...).CombinedOutput()
 	filesByTrackID := make(map[string]string, len(entries))
+	infoByTrackID := make(map[string]soundCloudInfo, len(entries))
 
 	walkErr := filepath.WalkDir(tmpDir, func(filePath string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || strings.ToLower(filepath.Ext(filePath)) != ".mp3" {
+		if err != nil || d.IsDir() {
 			return err
 		}
 
-		base := strings.TrimSuffix(filepath.Base(filePath), ".mp3")
+		ext := strings.ToLower(filepath.Ext(filePath))
+		if ext != ".mp3" && ext != ".json" {
+			return nil
+		}
+
+		base := strings.TrimSuffix(filepath.Base(filePath), ext)
 		parts := strings.SplitN(base, "-", 2)
 		if len(parts) != 2 {
 			return nil
 		}
 
-		filesByTrackID[parts[1]] = filePath
+		trackID := parts[1]
+		switch ext {
+		case ".mp3":
+			filesByTrackID[trackID] = filePath
+		case ".json":
+			raw, readErr := os.ReadFile(filePath)
+			if readErr != nil {
+				return readErr
+			}
+
+			var info soundCloudInfo
+			if err := json.Unmarshal(raw, &info); err != nil {
+				return nil
+			}
+			infoByTrackID[trackID] = info
+		}
+
 		return nil
 	})
 	if walkErr != nil {
@@ -326,7 +349,8 @@ func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string
 	}
 
 	for index, entry := range entries {
-		trackPath, ok := filesByTrackID[strings.TrimSpace(entry.ID)]
+		trackID := strings.TrimSpace(entry.ID)
+		trackPath, ok := filesByTrackID[trackID]
 		if !ok {
 			result.failures = append(result.failures, fmt.Errorf("track %d was not downloaded", index+1))
 			continue
@@ -346,8 +370,13 @@ func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string
 			continue
 		}
 
+		info := entry
+		if enriched, ok := infoByTrackID[trackID]; ok {
+			info = mergeSoundCloudInfo(entry, enriched)
+		}
+
 		result.tracks = append(result.tracks, downloadedSoundCloudTrack{
-			info: entry,
+			info: info,
 			path: trackPath,
 			size: stat.Size(),
 		})
@@ -366,6 +395,34 @@ func downloadSoundCloudAlbumTracks(ctx context.Context, binary, sourceURL string
 	}
 
 	return result, cleanup, nil
+}
+
+func mergeSoundCloudInfo(base, enriched soundCloudInfo) soundCloudInfo {
+	if strings.TrimSpace(enriched.ID) != "" {
+		base.ID = enriched.ID
+	}
+	if strings.TrimSpace(enriched.Title) != "" {
+		base.Title = enriched.Title
+	}
+	if strings.TrimSpace(enriched.Uploader) != "" {
+		base.Uploader = enriched.Uploader
+	}
+	if strings.TrimSpace(enriched.Artist) != "" {
+		base.Artist = enriched.Artist
+	}
+	if strings.TrimSpace(enriched.Creator) != "" {
+		base.Creator = enriched.Creator
+	}
+	if strings.TrimSpace(enriched.Thumbnail) != "" {
+		base.Thumbnail = enriched.Thumbnail
+	}
+	if strings.TrimSpace(enriched.WebpageURL) != "" {
+		base.WebpageURL = enriched.WebpageURL
+	}
+	if strings.TrimSpace(enriched.URL) != "" {
+		base.URL = enriched.URL
+	}
+	return base
 }
 
 func saveDownloadedSoundCloudTrack(ctx context.Context, s *TrackService, ownerID, albumID, trackID string, downloaded downloadedSoundCloudTrack) (domain.Track, error) {
